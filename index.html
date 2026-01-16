@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VeloMatch | App Final</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg: #121212; --card: #1e1e1e; --text: #ffffff; --primary: #adff2f; --nav: #000; --accent: #ff4757;
+        }
+        [data-theme="light"] {
+            --bg: #f5f5f5; --card: #ffffff; --text: #121212; --nav: #fff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); color: var(--text); height: 100vh; overflow: hidden; transition: 0.3s; }
+        
+        header { display: flex; justify-content: space-between; padding: 12px; background: var(--card); align-items: center; border-bottom: 1px solid #333; }
+        .level-badge { background: var(--primary); color: #000; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; }
+
+        .modal { position: fixed; z-index: 9999; inset: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; }
+        .modal-content { background: var(--card); padding: 25px; border-radius: 20px; text-align: center; width: 90%; max-width: 400px; }
+        
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: var(--bg); color: var(--text); }
+        .btn-main { width: 100%; padding: 12px; background: var(--primary); border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #000; }
+
+        .view { display: none; height: calc(100vh - 130px); padding: 15px; overflow-y: auto; }
+        .view.active { display: flex; flex-direction: column; }
+
+        #map { flex-grow: 1; border-radius: 15px; min-height: 250px; background: #222; width: 100%; }
+        
+        .product-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .p-card { background: var(--card); padding: 10px; border-radius: 12px; text-align: center; border: 1px solid #333; }
+
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; height: 65px; background: var(--nav); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #333; }
+        .bottom-nav button { background: none; border: none; color: var(--text); font-size: 1.4rem; cursor: pointer; }
+    </style>
+</head>
+<body data-theme="dark">
+
+    <header>
+        <div class="logo">VELOMATCH <span id="user-level" class="level-badge">Principiante</span></div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <select id="lang-selector" style="background:none; color:inherit; border:1px solid #444; border-radius:4px; padding: 2px;">
+                <option value="es">ES</option>
+                <option value="en">EN</option>
+            </select>
+            <button id="theme-toggle" style="background:none; border:none; color:inherit; cursor:pointer;">🌓</button>
+        </div>
+    </header>
+
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="txt-login-title">Bienvenido Ciclista</h2>
+            <input type="email" id="email-input" placeholder="Email" value="rider@velomatch.com">
+            <button class="btn-main" id="txt-login-btn">Entrar</button>
+        </div>
+    </div>
+
+    <div id="match-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2 style="color: var(--primary)">¡MATCH! 🚲</h2>
+            <div id="chat-box" style="height:150px; background:#000; margin:10px 0; border-radius:10px; padding:10px; overflow-y:auto; text-align:left; font-size:0.8rem;"></div>
+            <button onclick="document.getElementById('match-modal').style.display='none'" class="btn-main">Cerrar</button>
+        </div>
+    </div>
+
+    <main>
+        <section id="dating" class="view active">
+            <div style="background: var(--card); border-radius: 20px; overflow: hidden; height: 100%; display: flex; flex-direction: column;">
+                <img src="https://images.unsplash.com/photo-1541625602330-2277a4c46182?auto=format&fit=crop&w=500" style="width:100%; height:60%; object-fit:cover;">
+                <div style="padding:15px; flex-grow:1;">
+                    <h3>Mariana, 27</h3>
+                    <p id="txt-dating-desc">Busco grupeta para salir los sábados suave.</p>
+                </div>
+                <div style="display:flex; justify-content: space-around; padding: 15px;">
+                    <button style="border-radius:50%; width:50px; height:50px; border:none; background:#333; color:white;"><i class="fas fa-times"></i></button>
+                    <button id="btn-like" style="border-radius:50%; width:50px; height:50px; border:none; background:var(--primary);"><i class="fas fa-heart"></i></button>
+                </div>
+            </div>
+        </section>
+
+        <section id="route" class="view">
+            <div id="map"></div>
+            <div style="margin-top:10px; display:flex; justify-content: space-between; align-items: center; background:var(--card); padding:10px; border-radius:10px;">
+                <p><span id="txt-dist">Km</span>: <span id="dist-val">0.00</span></p>
+                <button id="start-btn" class="btn-main" style="width:auto; padding:5px 15px;">Grabar</button>
+            </div>
+        </section>
+
+        <section id="market" class="view">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 id="txt-market-title">Marketplace</h2>
+                <button id="btn-sell" style="background:var(--primary); border:none; padding:5px 10px; border-radius:5px; font-weight:bold;">+ Vender</button>
+            </div>
+            <div id="sell-form" style="display:none; background:var(--card); padding:10px; border-radius:10px; margin-top:10px;">
+                <input type="text" id="p-name" placeholder="Nombre">
+                <input type="number" id="p-price" placeholder="Precio">
+                <button id="btn-post" class="btn-main">Publicar</button>
+            </div>
+            <div class="product-grid" id="market-grid">
+                <div class="p-card">🚲 Specialized <br> $3200</div>
+            </div>
+        </section>
+    </main>
+
+    <nav class="bottom-nav">
+        <button id="nav-dating-btn"><i class="fas fa-heart"></i></button>
+        <button id="nav-route-btn"><i class="fas fa-map-marker-alt"></i></button>
+        <button id="nav-market-btn"><i class="fas fa-store"></i></button>
+    </nav>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Esperar a que el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', function() {
+            const translations = {
+                es: { loginTitle: "Bienvenido Ciclista", loginBtn: "Entrar", dist: "Distancia", startBtn: "Grabar", stopBtn: "Detener", market: "Marketplace", datingDesc: "Busco grupeta para salir los sábados suave." },
+                en: { loginTitle: "Welcome Cyclist", loginBtn: "Login", dist: "Distance", startBtn: "Record", stopBtn: "Stop", market: "Marketplace", datingDesc: "Looking for a group to ride on Saturdays." }
+            };
+
+            let map, watchId = null, path = [], polyline, totalKm = 0;
+
+            // Función SEGURA para actualizar textos (Evita el error de Null)
+            function safeText(id, text) {
+                const el = document.getElementById(id);
+                if (el) el.innerText = text;
+            }
+
+            function updateLanguage() {
+                const lang = document.getElementById('lang-selector')?.value || 'es';
+                const t = translations[lang];
+                safeText('txt-login-title', t.loginTitle);
+                safeText('txt-login-btn', t.loginBtn);
+                safeText('txt-dist', t.dist);
+                safeText('txt-market-title', t.market);
+                safeText('txt-dating-desc', t.datingDesc);
+                
+                const btn = document.getElementById('start-btn');
+                if(btn) btn.innerText = watchId ? t.stopBtn : t.startBtn;
+            }
+
+            // Inicializar Mapa solo si el div existe
+            const mapDiv = document.getElementById('map');
+            if(mapDiv) {
+                map = L.map('map').setView([40.4167, -3.7037], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                polyline = L.polyline([], {color: '#adff2f', weight: 5}).addTo(map);
+            }
+
+            // Navegación corregida
+            function showView(id) {
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                const target = document.getElementById(id);
+                if(target) {
+                    target.classList.add('active');
+                    if(id === 'route' && map) setTimeout(() => map.invalidateSize(), 300);
+                }
+            }
+
+            // Asignar eventos de forma segura
+            document.getElementById('nav-dating-btn')?.addEventListener('click', () => showView('dating'));
+            document.getElementById('nav-route-btn')?.addEventListener('click', () => showView('route'));
+            document.getElementById('nav-market-btn')?.addEventListener('click', () => showView('market'));
+
+            document.getElementById('txt-login-btn')?.addEventListener('click', () => {
+                const modal = document.getElementById('login-modal');
+                if(modal) modal.style.display = 'none';
+            });
+
+            document.getElementById('theme-toggle')?.addEventListener('click', () => {
+                const b = document.body;
+                b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+            });
+
+            document.getElementById('lang-selector')?.addEventListener('change', updateLanguage);
+
+            document.getElementById('btn-like')?.addEventListener('click', () => {
+                const modal = document.getElementById('match-modal');
+                const chat = document.getElementById('chat-box');
+                if(modal) modal.style.display = 'flex';
+                if(chat) chat.innerHTML = "<p style='color:gray'>Has conectado con Mariana.</p>";
+            });
+
+            document.getElementById('btn-sell')?.addEventListener('click', () => {
+                const f = document.getElementById('sell-form');
+                if(f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+            });
+
+            document.getElementById('btn-post')?.addEventListener('click', () => {
+                const n = document.getElementById('p-name')?.value;
+                const p = document.getElementById('p-price')?.value;
+                if(n && p) {
+                    const grid = document.getElementById('market-grid');
+                    if(grid) grid.innerHTML += `<div class="p-card">🚲 ${n} <br> $${p}</div>`;
+                    const f = document.getElementById('sell-form');
+                    if(f) f.style.display = 'none';
+                }
+            });
+
+            // Lógica GPS
+            document.getElementById('start-btn')?.addEventListener('click', function() {
+                const lang = document.getElementById('lang-selector')?.value || 'es';
+                if (!watchId) {
+                    this.style.background = "var(--accent)";
+                    this.innerText = "...";
+                    watchId = navigator.geolocation.watchPosition(pos => {
+                        const newPos = [pos.coords.latitude, pos.coords.longitude];
+                        path.push(newPos);
+                        if(polyline) polyline.setLatLngs(path);
+                        if(map) map.setView(newPos, 16);
+                        const distEl = document.getElementById('dist-val');
+                        if(distEl) distEl.innerText = (path.length * 0.005).toFixed(2);
+                    }, null, { enableHighAccuracy: true });
+                } else {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                    alert("Ruta guardada.");
+                    updateLanguage();
+                }
+            });
+
+            // Ejecutar traducción inicial
+            updateLanguage();
+        });
+    </script>
+</body>
+</html>
